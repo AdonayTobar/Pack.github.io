@@ -1,0 +1,465 @@
+// --- DATA ---
+const mockRestaurants = [
+    { id: 1, name: 'Pizza Bella', category: 'Pizza', rating: 4.5, imageUrl: 'https://placehold.co/600x400/f44336/ffffff?text=Pizza+Bella', menu: [{ id: 101, name: 'Pizza Margherita', price: 8.99 }, { id: 102, name: 'Pizza Pepperoni', price: 10.50 }, { id: 103, name: 'Gaseosa', price: 1.50 }] },
+    { id: 2, name: 'Burger Queen', category: 'Hamburguesas', rating: 4.2, imageUrl: 'https://placehold.co/600x400/ff9800/ffffff?text=Burger+Queen', menu: [{ id: 201, name: 'Hamburguesa Clásica', price: 5.99 }, { id: 202, name: 'Hamburguesa con Queso', price: 6.99 }, { id: 203, name: 'Papas Fritas', price: 2.50 }] },
+    { id: 3, name: 'Sushi House', category: 'Sushi', rating: 4.8, imageUrl: 'https://placehold.co/600x400/00bcd4/ffffff?text=Sushi+House', menu: [{ id: 301, name: 'Rollo California', price: 12.00 }, { id: 302, name: 'Nigiri de Salmón', price: 7.50 }, { id: 303, name: 'Sopa Miso', price: 3.00 }] },
+    { id: 4, name: 'Taco Fiesta', category: 'Mexicana', rating: 4.6, imageUrl: 'https://placehold.co/600x400/4caf50/ffffff?text=Taco+Fiesta', menu: [{ id: 401, name: 'Tacos al Pastor', price: 9.99 }, { id: 402, name: 'Burrito de Carnitas', price: 11.50 }, { id: 403, name: 'Guacamole y Chips', price: 4.50 }] },
+];
+const categories = ['Todos', 'Pizza', 'Hamburguesas', 'Sushi', 'Mexicana'];
+const WHASTAPP_NUMBER = '50360288548'; // Central phone number
+
+// --- STATE ---
+let appState = {
+    restaurants: mockRestaurants,
+    selectedCategory: 'Todos',
+    cart: {}, // Example: { restaurantId: { restaurantName, items: [] } }
+    customerName: '',
+    customerPhone: '',
+    specialInstructions: '',
+    deliveryAddress: { // Now an object to hold both URLs
+        osm: '',
+        gmaps: ''
+    },
+    mapPosition: [13.6843, -89.2348], // Default: San Salvador
+    map: null,
+    marker: null,
+};
+
+// --- DOM ELEMENTS ---
+const DOMElements = {
+    categoryContainer: document.querySelector("#category-filter-container > div"),
+    restaurantGrid: document.getElementById("restaurant-grid"),
+    restaurantModal: document.getElementById("restaurant-modal"),
+    restaurantModalContent: document.getElementById("restaurant-modal-content"),
+    cartSidebar: document.getElementById("cart-sidebar"),
+    cartContent: document.getElementById("cart-content"),
+    cartItemCount: document.getElementById("cart-item-count"),
+    headerCartButton: document.getElementById("header-cart-button"),
+};
+
+// --- HELPER FUNCTIONS ---
+const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+
+// --- RENDER FUNCTIONS ---
+function renderCategories() {
+    DOMElements.categoryContainer.innerHTML = categories.map(category => `
+        <button data-category="${category}" class="category-button px-4 py-2 text-sm sm:text-base font-semibold rounded-full whitespace-nowrap transition-all duration-200 ${appState.selectedCategory === category ? 'bg-red-500 text-white shadow-lg' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}">
+            ${category}
+        </button>
+    `).join('');
+}
+
+function renderRestaurants() {
+    const filtered = appState.selectedCategory === 'Todos' 
+        ? appState.restaurants 
+        : appState.restaurants.filter(r => r.category === appState.selectedCategory);
+    
+    DOMElements.restaurantGrid.innerHTML = filtered.map(restaurant => `
+        <div data-restaurant-id="${restaurant.id}" class="restaurant-card bg-white rounded-xl shadow-lg overflow-hidden transform hover:-translate-y-1 transition-all duration-300 cursor-pointer group">
+            <div class="relative">
+                <img class="w-full h-40 object-cover" src="${restaurant.imageUrl}" alt="Imagen de ${restaurant.name}" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/ffffff?text=Imagen+no+disponible';">
+                <div class="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold px-2 py-1 m-2 rounded-full">${restaurant.category}</div>
+            </div>
+            <div class="p-4">
+                <h3 class="text-lg font-bold text-gray-800 group-hover:text-red-500 transition-colors">${restaurant.name}</h3>
+                <div class="flex items-center mt-2 text-sm text-gray-600">
+                    <div class="flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="text-yellow-400"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>
+                        <span class="font-bold">${restaurant.rating}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderRestaurantModal(restaurant) {
+    DOMElements.restaurantModalContent.innerHTML = `
+        <div class="relative">
+            <img class="w-full h-48 object-cover rounded-t-2xl" src="${restaurant.imageUrl}" alt="Imagen de ${restaurant.name}" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/ffffff?text=Error';">
+            <button id="close-modal-button" class="absolute top-3 right-3 bg-white/70 rounded-full p-1.5 text-gray-800 hover:bg-white hover:scale-110 transition-transform">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div class="p-6 flex-grow overflow-y-auto">
+            <h2 class="text-3xl font-bold text-gray-900">${restaurant.name}</h2>
+            <div class="flex items-center gap-4 mt-2 text-gray-600">
+              <div class="flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" class="text-yellow-400"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg> ${restaurant.rating}</div>
+            </div>
+            <h3 class="text-xl font-semibold mt-6 mb-4 text-gray-800 border-b pb-2">Menú</h3>
+            <div class="space-y-4">
+                ${restaurant.menu.map(item => `
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="font-semibold text-gray-800">${item.name}</p>
+                            <p class="text-gray-600">${formatCurrency(item.price)}</p>
+                        </div>
+                        <button data-item-id="${item.id}" data-restaurant-id="${restaurant.id}" class="add-to-cart-button bg-red-100 text-red-600 hover:bg-red-500 hover:text-white font-bold p-2 rounded-full transition-all duration-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    DOMElements.restaurantModal.classList.remove('hidden');
+}
+
+function renderCart() {
+    let totalItems = 0;
+    let subtotal = 0;
+    for (const restaurantId in appState.cart) {
+        const restaurantData = appState.cart[restaurantId];
+        for (const item of restaurantData.items) {
+            totalItems += item.quantity;
+            subtotal += item.price * item.quantity;
+        }
+    }
+    
+    const deliveryFee = subtotal > 0 ? 2.50 : 0;
+    const total = subtotal + deliveryFee;
+
+    let contentHTML;
+    if (totalItems === 0) {
+        contentHTML = `
+            <div class="flex justify-between items-center p-5 border-b flex-shrink-0">
+                <h2 class="text-2xl font-bold text-gray-800">Tu Pedido</h2>
+                <button id="close-cart-button" class="p-2 rounded-full text-gray-500 hover:bg-gray-100">
+                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="flex-grow flex flex-col justify-center items-center text-center p-5">
+                <svg class="w-16 h-16 text-gray-300 mb-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                <h3 class="text-xl font-semibold text-gray-700">Tu carrito está vacío</h3>
+                <p class="text-gray-500 mt-2">Agrega productos de tus restaurantes favoritos.</p>
+            </div>
+        `;
+    } else {
+        const restaurantSections = Object.entries(appState.cart).map(([restaurantId, restaurantData]) => {
+            const itemsHTML = restaurantData.items.map(item => `
+                <div class="flex items-center gap-4">
+                    <div class="flex-grow">
+                        <p class="font-semibold text-gray-800">${item.name}</p>
+                        <p class="text-red-500 font-bold">${formatCurrency(item.price)}</p>
+                    </div>
+                    <div class="flex items-center gap-2 bg-gray-100 rounded-full p-1">
+                        <button data-item-id="${item.id}" data-restaurant-id="${restaurantId}" class="cart-quantity-decrease p-1 rounded-full hover:bg-gray-200"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+                        <span class="font-bold w-6 text-center">${item.quantity}</span>
+                        <button data-item-id="${item.id}" data-restaurant-id="${restaurantId}" class="cart-quantity-increase p-1 rounded-full hover:bg-gray-200"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+                    </div>
+                    <button data-item-id="${item.id}" data-restaurant-id="${restaurantId}" class="cart-remove-item text-gray-400 hover:text-red-500 p-1"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                </div>
+            `).join('');
+
+            return `
+                <div class="py-4">
+                    <h4 class="font-bold text-lg text-gray-800 pb-2 mb-2 border-b">${restaurantData.restaurantName}</h4>
+                    <div class="space-y-4">${itemsHTML}</div>
+                </div>
+            `;
+        }).join('');
+
+        contentHTML = `
+            <div class="flex flex-col h-full">
+                <div class="flex justify-between items-center p-5 border-b flex-shrink-0">
+                    <h2 class="text-2xl font-bold text-gray-800">Tu Pedido</h2>
+                    <button id="close-cart-button" class="p-2 rounded-full text-gray-500 hover:bg-gray-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                <div class="flex-grow flex flex-col overflow-y-auto">
+                    <div class="p-5">${restaurantSections}</div>
+                    <div class="p-5 border-t space-y-4">
+                        <!-- Customer Info -->
+                        <h3 class="text-lg font-semibold text-gray-800">Tus Datos</h3>
+                        <div>
+                            <label for="customer-name" class="text-sm font-semibold text-gray-700">Nombre Completo*</label>
+                            <input type="text" id="customer-name" value="${appState.customerName}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm" placeholder="Escribe tu nombre" required>
+                        </div>
+                        <div>
+                            <label for="customer-phone" class="text-sm font-semibold text-gray-700">Número de Teléfono*</label>
+                            <input type="tel" id="customer-phone" value="${appState.customerPhone}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm" placeholder="Escribe tu número de teléfono" required>
+                        </div>
+                        <hr class="my-4">
+                        <!-- Delivery Info -->
+                        <h3 class="text-lg font-semibold text-gray-800">Datos de Entrega</h3>
+                        <div>
+                            <label for="instructions" class="text-sm font-semibold text-gray-700">Instrucciones Especiales</label>
+                            <textarea id="instructions" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm" placeholder="Ej: Dejar en recepción...">${appState.specialInstructions}</textarea>
+                        </div>
+                        <div>
+                            <label class="text-sm font-semibold text-gray-700">Ubica tu Dirección en el Mapa*</label>
+                            <p class="text-xs text-gray-500 mb-2">Arrastra el marcador 📌 a tu ubicación exacta.</p>
+                            <div id="map-container" style="height: 250px; width: 100%; border-radius: 8px;"></div>
+                            <div class="mt-2">
+                                <input id="address-url" type="text" readonly value="${appState.deliveryAddress.osm}" class="block w-full bg-gray-100 rounded-md border-gray-300 text-xs" placeholder="URL del mapa aparecerá aquí"/>
+                                <a id="open-gmaps-link" href="${appState.deliveryAddress.gmaps || '#'}" target="_blank" class="text-sm text-blue-600 hover:underline ${!appState.deliveryAddress.gmaps && 'hidden'}">Ver en Google Maps</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="cart-footer" class="p-5 border-t space-y-3 mt-auto flex-shrink-0">
+                        <div class="flex justify-between text-gray-600"><span>Subtotal</span><span>${formatCurrency(subtotal)}</span></div>
+                        <div class="flex justify-between text-gray-600"><span>Tarifa de envío</span><span>${formatCurrency(deliveryFee)}</span></div>
+                        <div class="flex justify-between font-bold text-xl text-gray-800 pt-2 border-t mt-2"><span>Total</span><span>${formatCurrency(total)}</span></div>
+                        <button id="send-order-button" class="w-full bg-green-500 text-white font-bold py-3 rounded-lg mt-4 hover:bg-green-600 transition-colors shadow-lg flex items-center justify-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                            Enviar Pedido
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    DOMElements.cartContent.innerHTML = contentHTML;
+
+    if (totalItems > 0) {
+        DOMElements.cartItemCount.textContent = totalItems;
+        DOMElements.cartItemCount.classList.remove('hidden');
+    } else {
+        DOMElements.cartItemCount.classList.add('hidden');
+    }
+}
+
+// --- MAP FUNCTIONS ---
+function initMap() {
+    if (appState.map && document.getElementById('map-container')) {
+         appState.map.invalidateSize();
+         return;
+    }
+    if (document.getElementById('map-container')) {
+        appState.map = L.map('map-container').setView(appState.mapPosition, 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(appState.map);
+
+        appState.marker = L.marker(appState.mapPosition, { draggable: true }).addTo(appState.map);
+        
+        updateAddressUrl(appState.mapPosition[0], appState.mapPosition[1]);
+
+        appState.marker.on('dragend', function(event) {
+            const marker = event.target;
+            const position = marker.getLatLng();
+            appState.mapPosition = [position.lat, position.lng];
+            updateAddressUrl(position.lat, position.lng);
+        });
+
+        appState.map.on('click', function(e) {
+            const position = e.latlng;
+            appState.marker.setLatLng(position);
+            appState.mapPosition = [position.lat, position.lng];
+            updateAddressUrl(position.lat, position.lng);
+        });
+    }
+}
+
+function updateAddressUrl(lat, lng) {
+    const osmUrl = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}`;
+    const gmapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+    
+    appState.deliveryAddress.osm = osmUrl;
+    appState.deliveryAddress.gmaps = gmapsUrl;
+
+    const addressInput = document.getElementById('address-url');
+    if (addressInput) {
+        addressInput.value = osmUrl;
+    }
+    const gmapsLink = document.getElementById('open-gmaps-link');
+    if (gmapsLink) {
+        gmapsLink.href = gmapsUrl;
+        gmapsLink.classList.remove('hidden');
+    }
+}
+
+// --- EVENT HANDLERS & LOGIC ---
+function handleCategoryClick(event) {
+    const button = event.target.closest('.category-button');
+    if (button) {
+        appState.selectedCategory = button.dataset.category;
+        renderCategories();
+        renderRestaurants();
+    }
+}
+
+function handleRestaurantClick(event) {
+    const card = event.target.closest('.restaurant-card');
+    if (card) {
+        const restaurantId = parseInt(card.dataset.restaurantId, 10);
+        const restaurant = appState.restaurants.find(r => r.id === restaurantId);
+        if (restaurant) {
+            renderRestaurantModal(restaurant);
+        }
+    }
+}
+
+function closeModal() {
+    DOMElements.restaurantModal.classList.add('hidden');
+}
+
+function handleModalClick(event) {
+    if (event.target.id === 'restaurant-modal' || event.target.closest('#close-modal-button')) {
+        closeModal();
+    }
+    const button = event.target.closest('.add-to-cart-button');
+    if (button) {
+        const restaurantId = parseInt(button.dataset.restaurantId);
+        const restaurant = appState.restaurants.find(r => r.id === restaurantId);
+        const itemId = parseInt(button.dataset.itemId);
+        const item = restaurant.menu.find(m => m.id === itemId);
+        
+        if (!appState.cart[restaurantId]) {
+            appState.cart[restaurantId] = {
+                restaurantName: restaurant.name,
+                items: []
+            };
+        }
+
+        const existingItem = appState.cart[restaurantId].items.find(cartItem => cartItem.id === item.id);
+        if (existingItem) {
+            existingItem.quantity++;
+        } else {
+            appState.cart[restaurantId].items.push({ ...item, quantity: 1 });
+        }
+        renderCart();
+    }
+}
+
+function openCart() {
+    renderCart();
+    DOMElements.cartSidebar.classList.remove('hidden');
+    setTimeout(() => {
+        document.getElementById('cart-content').classList.remove('translate-x-full');
+    }, 10);
+    document.body.style.overflow = 'hidden';
+    if (Object.keys(appState.cart).length > 0) {
+        setTimeout(initMap, 150);
+    }
+}
+
+function closeCart() {
+    document.getElementById('cart-content').classList.add('translate-x-full');
+    setTimeout(() => {
+        DOMElements.cartSidebar.classList.add('hidden');
+    }, 300);
+    document.body.style.overflow = 'auto';
+}
+
+function handleCartClick(event) {
+    if (event.target.closest('#close-cart-button') || event.target.id === 'cart-overlay') {
+        closeCart();
+    }
+    const increaseBtn = event.target.closest('.cart-quantity-increase');
+    if (increaseBtn) {
+        const { itemId, restaurantId } = increaseBtn.dataset;
+        const item = appState.cart[restaurantId].items.find(i => i.id == itemId);
+        if (item) item.quantity++;
+        renderCart();
+        initMap();
+    }
+    const decreaseBtn = event.target.closest('.cart-quantity-decrease');
+    if (decreaseBtn) {
+        const { itemId, restaurantId } = decreaseBtn.dataset;
+        const restaurantItems = appState.cart[restaurantId].items;
+        const itemIndex = restaurantItems.findIndex(i => i.id == itemId);
+        if (itemIndex > -1) {
+            restaurantItems[itemIndex].quantity--;
+            if (restaurantItems[itemIndex].quantity === 0) {
+                restaurantItems.splice(itemIndex, 1);
+            }
+        }
+        if (restaurantItems.length === 0) {
+            delete appState.cart[restaurantId];
+        }
+        renderCart();
+        if (Object.keys(appState.cart).length > 0) initMap();
+    }
+    const removeBtn = event.target.closest('.cart-remove-item');
+    if (removeBtn) {
+        const { itemId, restaurantId } = removeBtn.dataset;
+        const restaurantItems = appState.cart[restaurantId].items;
+        appState.cart[restaurantId].items = restaurantItems.filter(i => i.id != itemId);
+        if (appState.cart[restaurantId].items.length === 0) {
+            delete appState.cart[restaurantId];
+        }
+        renderCart();
+        if (Object.keys(appState.cart).length > 0) initMap();
+    }
+    // Update state from inputs
+    if (event.target.id === 'customer-name') appState.customerName = event.target.value;
+    if (event.target.id === 'customer-phone') appState.customerPhone = event.target.value;
+    if (event.target.id === 'instructions') appState.specialInstructions = event.target.value;
+    
+    if (event.target.id === 'send-order-button') {
+        handleSendConsolidatedOrder();
+    }
+}
+
+function handleSendConsolidatedOrder() {
+    // Validation
+    if (!appState.customerName.trim()) {
+        alert('Por favor, ingresa tu nombre.');
+        return;
+    }
+    if (!appState.customerPhone.trim()) {
+        alert('Por favor, ingresa tu número de teléfono.');
+        return;
+    }
+    if (!appState.deliveryAddress.gmaps) {
+        alert('Por favor, selecciona tu dirección en el mapa.');
+        return;
+    }
+
+    let subtotal = 0;
+    let message = ` *Nuevo Pedido de PackSeguro* \n\n`;
+    message += `*DATOS DEL CLIENTE:*\n`;
+    message += ` *Nombre:* ${appState.customerName}\n`;
+    message += ` *Teléfono:* ${appState.customerPhone}\n\n`;
+    message += `----------------------------------\n\n`;
+    message += `*DETALLES DEL PEDIDO:*\n\n`;
+
+    for (const restaurantId in appState.cart) {
+        const restaurantData = appState.cart[restaurantId];
+        message += `*Restaurante: ${restaurantData.restaurantName}*\n`;
+        restaurantData.items.forEach(item => {
+            message += `   - ${item.quantity}x ${item.name} (${formatCurrency(item.price * item.quantity)})\n`;
+            subtotal += item.price * item.quantity;
+        });
+        message += `\n`;
+    }
+    
+    const deliveryFee = subtotal > 0 ? 2.50 : 0;
+    const total = subtotal + deliveryFee;
+
+    message += `----------------------------------\n\n`;
+    message += `*RESUMEN DE PAGO:*\n`;
+    message += `*Subtotal:* ${formatCurrency(subtotal)}\n`;
+    message += `*Envío:* ${formatCurrency(deliveryFee)}\n`;
+    message += `*TOTAL A PAGAR:* *${formatCurrency(total)}*\n\n`;
+
+    if(appState.specialInstructions) { 
+        message += `*INSTRUCCIONES ADICIONALES:*\n`;
+        message += `"${appState.specialInstructions}"\n\n`;
+    }
+
+    message += `*DIRECCIÓN DE ENTREGA (Google Maps):*\n`;
+    message += `${appState.deliveryAddress.gmaps}\n\n`;
+    message += `----------------------------------\n`;
+    message += `_Pedido generado a las ${new Date().toLocaleTimeString('es-SV')}_`;
+    
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${WHASTAPP_NUMBER}?text=${encodedMessage}`;
+    window.open(whatsappUrl, '_blank');
+}
+
+// --- INITIALIZATION ---
+function init() {
+    renderCategories();
+    renderRestaurants();
+    DOMElements.categoryContainer.addEventListener('click', handleCategoryClick);
+    DOMElements.restaurantGrid.addEventListener('click', handleRestaurantClick);
+    DOMElements.restaurantModal.addEventListener('click', handleModalClick);
+    DOMElements.headerCartButton.addEventListener('click', openCart);
+    DOMElements.cartSidebar.addEventListener('input', handleCartClick); // For textarea and inputs
+    DOMElements.cartSidebar.addEventListener('click', handleCartClick);
+}
+
+init();
