@@ -93,7 +93,7 @@
     
     <!-- Application JavaScript -->
     <script type="module">
-        // --- DATA ---
+        
         const mockRestaurants = [
             { id: 1, name: 'Pizza Bella', category: 'Pizza', rating: 4.5, imageUrl: 'https://placehold.co/600x400/f44336/ffffff?text=Pizza+Bella', menu: [{ id: 101, name: 'Pizza Margherita', price: 8.99 }, { id: 102, name: 'Pizza Pepperoni', price: 10.50 }, { id: 103, name: 'Gaseosa', price: 1.50 }] },
             { id: 2, name: 'Burger Queen', category: 'Hamburguesas', rating: 4.2, imageUrl: 'https://placehold.co/600x400/ff9800/ffffff?text=Burger+Queen', menu: [{ id: 201, name: 'Hamburguesa Clásica', price: 5.99 }, { id: 202, name: 'Hamburguesa con Queso', price: 6.99 }, { id: 203, name: 'Papas Fritas', price: 2.50 }] },
@@ -101,26 +101,26 @@
             { id: 4, name: 'Taco Fiesta', category: 'Mexicana', rating: 4.6, imageUrl: 'https://placehold.co/600x400/4caf50/ffffff?text=Taco+Fiesta', menu: [{ id: 401, name: 'Tacos al Pastor', price: 9.99 }, { id: 402, name: 'Burrito de Carnitas', price: 11.50 }, { id: 403, name: 'Guacamole y Chips', price: 4.50 }] },
         ];
         const categories = ['Todos', 'Pizza', 'Hamburguesas', 'Sushi', 'Mexicana'];
-        const WHASTAPP_NUMBER = '50360288548'; // Central phone number
+        const WHASTAPP_NUMBER = '50360288548'; 
 
-        // --- STATE ---
+        
         let appState = {
             restaurants: mockRestaurants,
             selectedCategory: 'Todos',
-            cart: {}, // Example: { restaurantId: { restaurantName, items: [] } }
+            cart: {}, 
             customerName: '',
             customerPhone: '',
             specialInstructions: '',
-            deliveryAddress: { // Now an object to hold both URLs
+            deliveryAddress: { 
                 osm: '',
                 gmaps: ''
             },
-            mapPosition: [13.6843, -89.2348], // Default: San Salvador
+            mapPosition: [13.6843, -89.2348], 
             map: null,
             marker: null,
         };
 
-        // --- DOM ELEMENTS ---
+        
         const DOMElements = {
             categoryContainer: document.querySelector("#category-filter-container > div"),
             restaurantGrid: document.getElementById("restaurant-grid"),
@@ -132,10 +132,10 @@
             headerCartButton: document.getElementById("header-cart-button"),
         };
 
-        // --- HELPER FUNCTIONS ---
+        
         const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
-        // --- RENDER FUNCTIONS ---
+        
         function renderCategories() {
             DOMElements.categoryContainer.innerHTML = categories.map(category => `
                 <button data-category="${category}" class="category-button px-4 py-2 text-sm sm:text-base font-semibold rounded-full whitespace-nowrap transition-all duration-200 ${appState.selectedCategory === category ? 'bg-red-500 text-white shadow-lg' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}">
@@ -315,7 +315,7 @@
             }
         }
 
-        // --- MAP FUNCTIONS ---
+        
         function initMap() {
             if (appState.map && document.getElementById('map-container')) {
                  appState.map.invalidateSize();
@@ -365,7 +365,7 @@
             }
         }
 
-        // --- EVENT HANDLERS & LOGIC ---
+        
         function handleCategoryClick(event) {
             const button = event.target.closest('.category-button');
             if (button) {
@@ -545,7 +545,7 @@
             window.open(whatsappUrl, '_blank');
         }
 
-        // --- INITIALIZATION ---
+        
         function init() {
             renderCategories();
             renderRestaurants();
